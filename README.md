@@ -1,2 +1,1 @@
-# super-cold-storage-signer
-Super Cold Storage Signer
+## Super Cold Storage Signer

@@ -1,0 +1,50 @@
+{
+  "name": "super-cold-storage-signer",
+  "version": "0.0.1",
+  "description": "Super Cold Storage Signer",
+  "license": "MIT",
+  "author": "ACC01ADE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ACC01ADE/super-cold-storage-signer.git"
+  },
+  "homepage": "https://github.com/ACC01ADE/super-cold-storage-signer",
+  "keywords": [],
+  "bugs": {
+    "url": "https://github.com/ACC01ADE/super-cold-storage-signer/issues"
+  },
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "types.ts",
+    "tsconfig.json"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "prettier:check": "prettier --loglevel error --ignore-path .gitignore --list-different .",
+    "prettier:fix": "prettier --loglevel error --ignore-path .gitignore --write ."
+  },
+  "dependencies": {
+    "@ethersproject/abstract-provider": "^5.7.0",
+    "@ethersproject/abstract-signer": "^5.7.0",
+    "@ethersproject/address": "^5.7.0",
+    "@ethersproject/bignumber": "^5.7.0",
+    "@ethersproject/bytes": "^5.7.0",
+    "@ethersproject/properties": "^5.7.0",
+    "@ethersproject/providers": "^5.7.2",
+    "@ethersproject/strings": "^5.7.0",
+    "@ethersproject/transactions": "^5.7.0"
+  },
+  "devDependencies": {
+    "@types/data-urls": "^2.0.1",
+    "@types/node": "^17.0.21",
+    "dotenv": "^10.0.0",
+    "path": "^0.12.7",
+    "prettier": "^2.6.2",
+    "ts-node": "^10.1.0",
+    "typechain": "^7.0.0",
+    "typescript": "^4.3.5"
+  }
+}
