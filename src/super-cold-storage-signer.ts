@@ -4,7 +4,7 @@ import { getAddress as sanitizeAddress } from '@ethersproject/address';
 import { BigNumber } from '@ethersproject/bignumber';
 import { Bytes, hexlify, joinSignature, SignatureLike } from '@ethersproject/bytes';
 import { defineReadOnly, resolveProperties } from '@ethersproject/properties';
-import { TransactionRequest } from '@ethersproject/providers';
+import { JsonRpcProvider, TransactionRequest, Web3Provider } from '@ethersproject/providers';
 import { toUtf8Bytes } from '@ethersproject/strings';
 import { serialize as serializeTransaction, UnsignedTransaction } from '@ethersproject/transactions';
 
@@ -21,12 +21,20 @@ enum HttpMethod {
 }
 
 export class SuperColdStorageSigner extends Signer {
+  readonly address!: string;
   readonly endpoint!: URL;
   readonly authorization!: string;
   readonly ca?: string;
 
-  constructor(endpoint: string, authorization: string, provider?: Provider, ca?: string) {
+  constructor(
+    address: string,
+    endpoint: string,
+    authorization: string,
+    provider?: Provider | JsonRpcProvider | Web3Provider,
+    ca?: string
+  ) {
     super();
+    defineReadOnly(this, 'address', address);
     defineReadOnly(this, 'endpoint', new URL(endpoint));
     defineReadOnly(this, 'authorization', authorization);
     defineReadOnly(this, 'provider', provider);
@@ -35,8 +43,8 @@ export class SuperColdStorageSigner extends Signer {
     }
   }
 
-  connect(provider: Provider): SuperColdStorageSigner {
-    return new SuperColdStorageSigner(this.endpoint.toString(), this.authorization, provider, this.ca);
+  connect(provider: Provider | JsonRpcProvider | Web3Provider): SuperColdStorageSigner {
+    return new SuperColdStorageSigner(this.address, this.endpoint.toString(), this.authorization, provider, this.ca);
   }
 
   async getAddress(): Promise<string> {
@@ -48,7 +56,7 @@ export class SuperColdStorageSigner extends Signer {
       message = toUtf8Bytes(message);
     }
 
-    const messageHex: string = hexlify(message).slice(2);
+    const messageHex: string = hexlify(message, { allowMissingPrefix: true, hexPad: 'left' }).slice(2);
     return joinSignature(await this._sign(messageHex, true));
   }
 
@@ -71,9 +79,9 @@ export class SuperColdStorageSigner extends Signer {
     const result: Record<string, unknown> = await this._request(
       isMessage ? 'signMessage' : 'signTransaction',
       HttpMethod.POST,
-      unsignedTx
+      { message: unsignedTx }
     );
-    if ('signature' in result) {
+    if (Object.keys(result).includes('signature')) {
       return result.signature as SignatureLike;
     }
 
@@ -90,8 +98,8 @@ export class SuperColdStorageSigner extends Signer {
 
   private async _label(): Promise<string> {
     const result: Record<string, unknown> = await this._request('getLabel', HttpMethod.GET);
-    if ('label' in result) {
-      return result.laber as string;
+    if (Object.keys(result).includes('label')) {
+      return result.label as string;
     }
 
     throw new Error(`Could not get label: ${JSON.stringify(result)}`);
@@ -105,7 +113,7 @@ export class SuperColdStorageSigner extends Signer {
     const requestOptions: RequestOptions = {
       hostname: this.endpoint.hostname,
       method: HttpMethod[method],
-      path,
+      path: '/' + this.address + '/' + path,
       port: this.endpoint.port === '' ? 443 : Number.parseInt(this.endpoint.port, 10),
       headers: {
         Accept: 'application/json;odata=verbose',
@@ -124,8 +132,6 @@ export class SuperColdStorageSigner extends Signer {
     let result = '';
     const promise = new Promise((resolve, reject) => {
       const req: ClientRequest = http.request(options, (res) => {
-        console.log('statusCode:', res.statusCode);
-        console.log('headers:', res.headers);
         res.on('data', (chunk) => {
           result += chunk;
         });
@@ -140,8 +146,6 @@ export class SuperColdStorageSigner extends Signer {
             if (res.statusCode === 200) {
               body = JSON.parse(result);
             }
-
-            console.log(res.statusCode, result);
             resolve(body);
           } catch (error: any) {
             console.log(error);
@@ -181,9 +185,7 @@ export class SuperColdStorageSigner extends Signer {
       /**
        * end the request to prevent ECONNRESETand socket hung errors
        */
-      req.end(() => {
-        console.log('request ends');
-      });
+      req.end(() => {});
     });
     return promise;
   }

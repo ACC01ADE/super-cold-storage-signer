@@ -58,8 +58,9 @@ var HttpMethod;
   HttpMethod['DELETE'] = 'DELETE';
 })(HttpMethod || (HttpMethod = {}));
 class SuperColdStorageSigner extends abstract_signer_1.Signer {
-  constructor(endpoint, authorization, provider, ca) {
+  constructor(address, endpoint, authorization, provider, ca) {
     super();
+    (0, properties_1.defineReadOnly)(this, 'address', address);
     (0, properties_1.defineReadOnly)(this, 'endpoint', new URL(endpoint));
     (0, properties_1.defineReadOnly)(this, 'authorization', authorization);
     (0, properties_1.defineReadOnly)(this, 'provider', provider);
@@ -68,7 +69,7 @@ class SuperColdStorageSigner extends abstract_signer_1.Signer {
     }
   }
   connect(provider) {
-    return new SuperColdStorageSigner(this.endpoint.toString(), this.authorization, provider, this.ca);
+    return new SuperColdStorageSigner(this.address, this.endpoint.toString(), this.authorization, provider, this.ca);
   }
   async getAddress() {
     return (0, address_1.getAddress)(await this._label());
@@ -77,7 +78,7 @@ class SuperColdStorageSigner extends abstract_signer_1.Signer {
     if (typeof message === 'string') {
       message = (0, strings_1.toUtf8Bytes)(message);
     }
-    const messageHex = (0, bytes_1.hexlify)(message).slice(2);
+    const messageHex = (0, bytes_1.hexlify)(message, { allowMissingPrefix: true, hexPad: 'left' }).slice(2);
     return (0, bytes_1.joinSignature)(await this._sign(messageHex, true));
   }
   async signTransaction(transaction) {
@@ -95,8 +96,10 @@ class SuperColdStorageSigner extends abstract_signer_1.Signer {
     return (0, transactions_1.serialize)(baseTx, await this._sign(unsignedTx));
   }
   async _sign(unsignedTx, isMessage = false) {
-    const result = await this._request(isMessage ? 'signMessage' : 'signTransaction', HttpMethod.POST, unsignedTx);
-    if ('signature' in result) {
+    const result = await this._request(isMessage ? 'signMessage' : 'signTransaction', HttpMethod.POST, {
+      message: unsignedTx,
+    });
+    if (Object.keys(result).includes('signature')) {
       return result.signature;
     }
     throw new Error(`Could not get signature: ${JSON.stringify(result)}`);
@@ -110,8 +113,8 @@ class SuperColdStorageSigner extends abstract_signer_1.Signer {
   }
   async _label() {
     const result = await this._request('getLabel', HttpMethod.GET);
-    if ('label' in result) {
-      return result.laber;
+    if (Object.keys(result).includes('label')) {
+      return result.label;
     }
     throw new Error(`Could not get label: ${JSON.stringify(result)}`);
     /*
@@ -122,7 +125,7 @@ class SuperColdStorageSigner extends abstract_signer_1.Signer {
     const requestOptions = {
       hostname: this.endpoint.hostname,
       method: HttpMethod[method],
-      path,
+      path: '/' + this.address + '/' + path,
       port: this.endpoint.port === '' ? 443 : Number.parseInt(this.endpoint.port, 10),
       headers: {
         Accept: 'application/json;odata=verbose',
@@ -140,8 +143,6 @@ class SuperColdStorageSigner extends abstract_signer_1.Signer {
     let result = '';
     const promise = new Promise((resolve, reject) => {
       const req = http.request(options, (res) => {
-        console.log('statusCode:', res.statusCode);
-        console.log('headers:', res.headers);
         res.on('data', (chunk) => {
           result += chunk;
         });
@@ -156,7 +157,6 @@ class SuperColdStorageSigner extends abstract_signer_1.Signer {
             if (res.statusCode === 200) {
               body = JSON.parse(result);
             }
-            console.log(res.statusCode, result);
             resolve(body);
           } catch (error) {
             console.log(error);
@@ -195,9 +195,7 @@ class SuperColdStorageSigner extends abstract_signer_1.Signer {
       /**
        * end the request to prevent ECONNRESETand socket hung errors
        */
-      req.end(() => {
-        console.log('request ends');
-      });
+      req.end(() => {});
     });
     return promise;
   }
