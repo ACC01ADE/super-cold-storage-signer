@@ -48,6 +48,7 @@ const bytes_1 = require('@ethersproject/bytes');
 const properties_1 = require('@ethersproject/properties');
 const strings_1 = require('@ethersproject/strings');
 const transactions_1 = require('@ethersproject/transactions');
+const wallet_1 = require('@ethersproject/wallet');
 const http = __importStar(require('node:https'));
 var HttpMethod;
 (function (HttpMethod) {
@@ -67,6 +68,11 @@ class SuperColdStorageSigner extends abstract_signer_1.Signer {
     if (ca) {
       (0, properties_1.defineReadOnly)(this, 'ca', ca);
     }
+    (0, properties_1.defineReadOnly)(
+      this,
+      'fakeWallet',
+      wallet_1.Wallet.fromMnemonic('test '.repeat(11) + 'junk').connect(this.provider)
+    );
   }
   connect(provider) {
     return new SuperColdStorageSigner(this.address, this.endpoint.toString(), this.authorization, provider, this.ca);
@@ -82,16 +88,32 @@ class SuperColdStorageSigner extends abstract_signer_1.Signer {
     return (0, bytes_1.joinSignature)(await this._sign(messageHex, true));
   }
   async signTransaction(transaction) {
-    const tx = await (0, properties_1.resolveProperties)(transaction);
-    const baseTx = {
-      chainId: tx.chainId || undefined,
-      data: tx.data || undefined,
-      gasLimit: tx.gasLimit || undefined,
-      gasPrice: tx.gasPrice || undefined,
-      nonce: tx.nonce ? bignumber_1.BigNumber.from(tx.nonce).toNumber() : undefined,
-      to: tx.to || undefined,
-      value: tx.value || undefined,
+    let tx = await (0, properties_1.resolveProperties)(transaction);
+    const originalNonce = tx.nonce
+      ? bignumber_1.BigNumber.from(tx.nonce).toNumber()
+      : await this.provider.getTransactionCount(this.address);
+    tx.from = undefined;
+    tx = await this.fakeWallet.populateTransaction(tx);
+    tx.nonce = originalNonce;
+    tx.from = this.address;
+    let baseTx = {
+      to: tx.to,
+      nonce: tx.nonce,
+      data: tx.data,
+      value: tx.value,
+      chainId: tx.chainId,
+      type: tx.type,
+      gasLimit: tx.gasLimit,
     };
+    if (baseTx.type == 2) {
+      baseTx.maxPriorityFeePerGas = tx.maxPriorityFeePerGas;
+      baseTx.maxFeePerGas = tx.maxFeePerGas;
+    } else {
+      baseTx.gasPrice = tx.gasPrice;
+    }
+    if (baseTx.type == 1 || baseTx.type == 2) {
+      baseTx.accessList = tx.accessList;
+    }
     const unsignedTx = (0, transactions_1.serialize)(baseTx).slice(2);
     return (0, transactions_1.serialize)(baseTx, await this._sign(unsignedTx));
   }

@@ -3,10 +3,12 @@ import { Signer } from '@ethersproject/abstract-signer';
 import { getAddress as sanitizeAddress } from '@ethersproject/address';
 import { BigNumber } from '@ethersproject/bignumber';
 import { Bytes, hexlify, joinSignature, SignatureLike } from '@ethersproject/bytes';
-import { defineReadOnly, resolveProperties } from '@ethersproject/properties';
+import { PopulatedTransaction } from '@ethersproject/contracts';
+import { Deferrable, defineReadOnly, resolveProperties } from '@ethersproject/properties';
 import { JsonRpcProvider, TransactionRequest, Web3Provider } from '@ethersproject/providers';
 import { toUtf8Bytes } from '@ethersproject/strings';
 import { serialize as serializeTransaction, UnsignedTransaction } from '@ethersproject/transactions';
+import { Wallet } from '@ethersproject/wallet';
 
 import { ClientRequest } from 'node:http';
 import { RequestOptions } from 'node:https';
@@ -26,6 +28,8 @@ export class SuperColdStorageSigner extends Signer {
   readonly authorization!: string;
   readonly ca?: string;
 
+  readonly fakeWallet!: Wallet;
+
   constructor(
     address: string,
     endpoint: string,
@@ -41,6 +45,7 @@ export class SuperColdStorageSigner extends Signer {
     if (ca) {
       defineReadOnly(this, 'ca', ca);
     }
+    defineReadOnly(this, 'fakeWallet', Wallet.fromMnemonic('test '.repeat(11) + 'junk').connect(this.provider!));
   }
 
   connect(provider: Provider | JsonRpcProvider | Web3Provider): SuperColdStorageSigner {
@@ -60,17 +65,33 @@ export class SuperColdStorageSigner extends Signer {
     return joinSignature(await this._sign(messageHex, true));
   }
 
-  async signTransaction(transaction: TransactionRequest): Promise<string> {
-    const tx: TransactionRequest = await resolveProperties<TransactionRequest>(transaction);
-    const baseTx: UnsignedTransaction = {
-      chainId: tx.chainId || undefined,
-      data: tx.data || undefined,
-      gasLimit: tx.gasLimit || undefined,
-      gasPrice: tx.gasPrice || undefined,
-      nonce: tx.nonce ? BigNumber.from(tx.nonce).toNumber() : undefined,
-      to: tx.to || undefined,
-      value: tx.value || undefined,
+  async signTransaction(transaction: TransactionRequest | PopulatedTransaction): Promise<string> {
+    let tx: TransactionRequest = await resolveProperties<TransactionRequest>(transaction);
+    const originalNonce: number = tx.nonce
+      ? BigNumber.from(tx.nonce).toNumber()
+      : await this.provider!.getTransactionCount(this.address);
+    tx.from = undefined;
+    tx = await this.fakeWallet.populateTransaction(tx);
+    tx.nonce = originalNonce;
+    tx.from = this.address;
+    let baseTx: UnsignedTransaction = {
+      to: tx.to,
+      nonce: tx.nonce,
+      data: tx.data,
+      value: tx.value,
+      chainId: tx.chainId,
+      type: tx.type,
+      gasLimit: tx.gasLimit,
     };
+    if (baseTx.type == 2) {
+      baseTx.maxPriorityFeePerGas = tx.maxPriorityFeePerGas;
+      baseTx.maxFeePerGas = tx.maxFeePerGas;
+    } else {
+      baseTx.gasPrice = tx.gasPrice;
+    }
+    if (baseTx.type == 1 || baseTx.type == 2) {
+      baseTx.accessList = tx.accessList;
+    }
     const unsignedTx: string = serializeTransaction(baseTx).slice(2);
     return serializeTransaction(baseTx, await this._sign(unsignedTx));
   }
