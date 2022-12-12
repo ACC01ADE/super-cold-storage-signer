@@ -43,12 +43,10 @@ Object.defineProperty(exports, '__esModule', { value: true });
 exports.SuperColdStorageSigner = void 0;
 const abstract_signer_1 = require('@ethersproject/abstract-signer');
 const address_1 = require('@ethersproject/address');
-const bignumber_1 = require('@ethersproject/bignumber');
 const bytes_1 = require('@ethersproject/bytes');
 const properties_1 = require('@ethersproject/properties');
 const strings_1 = require('@ethersproject/strings');
 const transactions_1 = require('@ethersproject/transactions');
-const wallet_1 = require('@ethersproject/wallet');
 const http = __importStar(require('node:https'));
 var HttpMethod;
 (function (HttpMethod) {
@@ -68,11 +66,6 @@ class SuperColdStorageSigner extends abstract_signer_1.Signer {
     if (ca) {
       (0, properties_1.defineReadOnly)(this, 'ca', ca);
     }
-    (0, properties_1.defineReadOnly)(
-      this,
-      'fakeWallet',
-      wallet_1.Wallet.fromMnemonic('test '.repeat(11) + 'junk').connect(this.provider)
-    );
   }
   connect(provider) {
     return new SuperColdStorageSigner(this.address, this.endpoint.toString(), this.authorization, provider, this.ca);
@@ -89,16 +82,9 @@ class SuperColdStorageSigner extends abstract_signer_1.Signer {
   }
   async signTransaction(transaction) {
     let tx = await (0, properties_1.resolveProperties)(transaction);
-    const originalNonce = tx.nonce
-      ? bignumber_1.BigNumber.from(tx.nonce).toNumber()
-      : await this.provider.getTransactionCount(this.address);
-    tx.from = undefined;
-    tx = await this.fakeWallet.populateTransaction(tx);
-    tx.nonce = originalNonce;
-    tx.from = this.address;
     let baseTx = {
       to: tx.to,
-      nonce: tx.nonce,
+      nonce: tx.nonce ? tx.nonce : await this.provider.getTransactionCount(this.address),
       data: tx.data,
       value: tx.value,
       chainId: tx.chainId,

@@ -8,7 +8,6 @@ import { Deferrable, defineReadOnly, resolveProperties } from '@ethersproject/pr
 import { JsonRpcProvider, TransactionRequest, Web3Provider } from '@ethersproject/providers';
 import { toUtf8Bytes } from '@ethersproject/strings';
 import { serialize as serializeTransaction, UnsignedTransaction } from '@ethersproject/transactions';
-import { Wallet } from '@ethersproject/wallet';
 
 import { ClientRequest } from 'node:http';
 import { RequestOptions } from 'node:https';
@@ -28,8 +27,6 @@ export class SuperColdStorageSigner extends Signer {
   readonly authorization!: string;
   readonly ca?: string;
 
-  readonly fakeWallet!: Wallet;
-
   constructor(
     address: string,
     endpoint: string,
@@ -45,7 +42,6 @@ export class SuperColdStorageSigner extends Signer {
     if (ca) {
       defineReadOnly(this, 'ca', ca);
     }
-    defineReadOnly(this, 'fakeWallet', Wallet.fromMnemonic('test '.repeat(11) + 'junk').connect(this.provider!));
   }
 
   connect(provider: Provider | JsonRpcProvider | Web3Provider): SuperColdStorageSigner {
@@ -67,16 +63,9 @@ export class SuperColdStorageSigner extends Signer {
 
   async signTransaction(transaction: TransactionRequest | PopulatedTransaction): Promise<string> {
     let tx: TransactionRequest = await resolveProperties<TransactionRequest>(transaction);
-    const originalNonce: number = tx.nonce
-      ? BigNumber.from(tx.nonce).toNumber()
-      : await this.provider!.getTransactionCount(this.address);
-    tx.from = undefined;
-    tx = await this.fakeWallet.populateTransaction(tx);
-    tx.nonce = originalNonce;
-    tx.from = this.address;
     let baseTx: UnsignedTransaction = {
       to: tx.to,
-      nonce: tx.nonce,
+      nonce: tx.nonce ? (tx.nonce as number) : await this.provider!.getTransactionCount(this.address),
       data: tx.data,
       value: tx.value,
       chainId: tx.chainId,

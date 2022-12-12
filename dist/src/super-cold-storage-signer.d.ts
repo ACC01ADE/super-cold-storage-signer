@@ -4,13 +4,11 @@ import { Signer } from '@ethersproject/abstract-signer';
 import { Bytes } from '@ethersproject/bytes';
 import { PopulatedTransaction } from '@ethersproject/contracts';
 import { JsonRpcProvider, TransactionRequest, Web3Provider } from '@ethersproject/providers';
-import { Wallet } from '@ethersproject/wallet';
 export declare class SuperColdStorageSigner extends Signer {
   readonly address: string;
   readonly endpoint: URL;
   readonly authorization: string;
   readonly ca?: string;
-  readonly fakeWallet: Wallet;
   constructor(
     address: string,
     endpoint: string,
